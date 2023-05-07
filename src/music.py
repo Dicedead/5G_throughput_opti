@@ -11,7 +11,7 @@ def music_algorithm(cov_y, antenna_positions, lambda_, nbr_doas, resolution=0.1)
     :param lambda_: wavelength
     :param nbr_doas: number of directional of arrivals to estimate
     :param resolution: spectral resolution
-    :return: peak DOAs, width of beams, prominence of beams, complete estimated PSD
+    :return: peak DOAs, width of beams, prominence of beams, complete estimated PSD, all DOAs considered
     """
     thetas = np.arange(0, 360, resolution)
     a = np.exp(
@@ -27,6 +27,6 @@ def music_algorithm(cov_y, antenna_positions, lambda_, nbr_doas, resolution=0.1)
     widths = peak_widths(psd, peaks)[0] / len(psd) * 360
     prominences = peak_prominences(psd, peaks)[0]
 
-    return thetas[peaks], widths, prominences, psd
+    return thetas[peaks], widths, prominences, psd, thetas
 
 
