@@ -17,7 +17,7 @@ def throughput_statistic(
     for pos in transmitter_positions:
         b_gain, _ = beamforming_method(antenna_positions, wavelength, pos, resolution=resolution)
         for b in b_gain:
-            r_user[i] = channel_bandwidth_per_user * np.log2(1 + c0 * (b ** 2 / 2) / noise_level)
+            r_user[i] = channel_bandwidth_per_user * np.log2(1 + c0 * (b ** 2) / noise_level)
             i += 1
 
     return statistic(r_user)
