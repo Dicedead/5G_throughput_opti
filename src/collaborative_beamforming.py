@@ -1,38 +1,85 @@
 import math
 
-'''
-Gets angle of a vector (x,y)
-'''
+import numpy as np
+import pycsou.abc.operator as pyop
+import pycsou.operator.func as pyfu
+import pycsou.operator.blocks as pybx
+import pycsou.operator.linop as pylin
+
+from pycsou.operator.map.base import ConstantValued
+
+
 def get_angle(x, y):
+    """
+    Gets angle of a vector (x,y)
+    """
     angle = math.atan2(y, x) * 180 / math.pi
-    if(angle < 0):
+    if angle < 0:
         angle += 360
     return angle
 
 
-'''
-density_matrix : matrix with number of users in each pixel
-base_station_positions : list of positions of the base stations in a 5000x5000m (?) zone
-matrix_resolution : size of the side of one pixel in density_matrix
-cluster_threshold : Minimum number of users in a cluster in order to consider it 
-'''
-def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_resolution = 100, cluster_threshold = 5):
+def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix, lambda_=0.5):
+    steering_matrix = np.vstack(steering_matrices)
+
+    beamforming_cols = []
+    zero_vector_length = len(beamforming_weights[0])
+    num_zero_vectors = len(beamforming_weights) - 1
+    for idx, w in enumerate(beamforming_weights):
+        tmp = [np.zeros(zero_vector_length) for _ in range(num_zero_vectors)]
+        tmp.insert(idx, w)
+        beamforming_cols.append(np.array(tmp).reshape(-1, 1))
+    beamforming_matrix = np.hstack(beamforming_cols)
+
+    C = np.conjugate(steering_matrix.T) @ beamforming_matrix
+    Ch = np.conjugate(C).T
+    D = C @ Ch
+    C_R_Ch = np.real(C @ covariance_matrix @ Ch)
+    D_had_Dt = D * D.T
+
+    Q = np.vstack([
+        np.hstack([2 * D_had_Dt, -4 * np.real(np.diagonal(D @ D)).reshape(-1, 1)]),
+        np.hstack([np.zeros(len(D)), np.array([2 * (np.linalg.norm(Ch @ C) ** 2)])])
+    ])
+    assert len(D) + 1 == len(Q)
+
+    c = -2 * np.real(np.vstack([np.diagonal(C_R_Ch).reshape(-1, 1), np.trace(C_R_Ch)])).flatten()
+
+    Q_op = pyop.LinOp.from_array(Q)
+    c_op = pyop.LinFunc.from_array(c)
+
+    mask = pylin.DiagonalOp(np.vstack([np.ones((len(D), 1)), 0]).flatten())
+
+    data_fid = pyop.QuadraticFunc(shape=(1, len(Q)), Q=Q_op, c=c_op)
+    l1_reg = lambda_ * (pyfu.L1Norm(dim=len(Q)) * mask)
+
+
+
+
+def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_resolution=100, cluster_threshold=5):
+    """
+    density_matrix : matrix with number of users in each pixel
+    base_station_positions : list of positions of the base stations in a 5000x5000m (?) zone
+    matrix_resolution : size of the side of one pixel in density_matrix
+    cluster_threshold : Minimum number of users in a cluster in order to consider it
+    """
     bs_doas = [[] for i in range(len(base_station_positions))]
 
-    for i in len(density_matrix):
-        for j in len(density_matrix[i]):
-            if(density_matrix[i][j] > cluster_threshold):
-                x_cluster, y_cluster = (i*matrix_resolution + matrix_resolution/2, j*matrix_resolution + matrix_resolution/2)
+    for i in range(len(density_matrix)):
+        for j in range(len(density_matrix[i])):
+            if density_matrix[i][j] > cluster_threshold:
+                x_cluster, y_cluster = (
+                    i * matrix_resolution + matrix_resolution / 2, j * matrix_resolution + matrix_resolution / 2)
                 min_dist = -1
                 closest_bs = -1
                 for k in range(len(base_station_positions)):
                     x = base_station_positions[k][0]
                     y = base_station_positions[k][1]
-                    dist = (x-x_cluster)**2 + (y-y_cluster)**2
-                    if(dist < min_dist or min_dist < 0):
+                    dist = (x - x_cluster) ** 2 + (y - y_cluster) ** 2
+                    if dist < min_dist or min_dist < 0:
                         min_dist = dist
                         closest_bs = k
-                
+
                 closest_bs_position = base_station_positions[closest_bs]
                 doa = get_angle((x_cluster, y_cluster) - closest_bs_position)
                 bs_doas[closest_bs].append(doa)
@@ -40,3 +87,21 @@ def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_
     return bs_doas
 
 
+if __name__ == "__main__":
+    s1 = np.array([
+        [1, 2, 3, 0],
+        [4, 5, 6, 0]
+    ])
+    s2 = np.array([
+        [7, 8, 9, 0],
+        [10, 11, 12, 0]
+    ])
+    s3 = np.array([
+        [13, 8, 9, 0],
+        [10, 56, 12, 0]
+    ])
+    w1 = np.array([1, 2])
+    w2 = np.array([4, 5])
+    w3 = np.array([7, 8])
+
+    lasso_optimization([s1, s2, s3], [w1, w2, w3], np.eye(3),)
