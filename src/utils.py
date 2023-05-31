@@ -1,5 +1,35 @@
-import numpy as np
+import math
 
+import numpy as np
+import pycsou.abc.operator as pyop
+import pycsou.operator.func as pyfu
+import pycsou.util.ptype as pyct
+
+
+def get_angle(x, y):
+    """
+    Gets angle of a vector (x,y)
+    """
+    angle = math.atan2(y, x) * 180 / math.pi
+    if angle < 0:
+        angle += 360
+    return angle
+
+
+class L1NormMod(pyop.ProxFunc):
+    def __init__(self, shape: pyct.OpShape):
+        super().__init__(shape)
+        n_out, n_in = shape
+        self.l1norm = pyfu.PositiveL1Norm(dim=n_in - 1)
+
+    def apply(self, arr: pyct.NDArray) -> pyct.NDArray:
+        return np.vstack([self.l1norm(arr[:-1]), arr[-1]])
+
+    def prox(self, arr: pyct.NDArray, tau: pyct.Real) -> pyct.NDArray:
+        return np.vstack([self.l1norm.prox(arr[:-1], tau=tau).reshape(-1, 1), arr[-1].reshape(-1, 1)]).flatten()
+
+    def lipschitz(self, **kwargs) -> pyct.Real:
+        return self.l1norm.lipschitz()
 
 def throughput_statistic(
         statistic,

@@ -1,25 +1,20 @@
-import math
-
 import numpy as np
 import pycsou.abc.operator as pyop
-import pycsou.operator.func as pyfu
-import pycsou.operator.blocks as pybx
-import pycsou.operator.linop as pylin
 
-from pycsou.operator.map.base import ConstantValued
-
-
-def get_angle(x, y):
-    """
-    Gets angle of a vector (x,y)
-    """
-    angle = math.atan2(y, x) * 180 / math.pi
-    if angle < 0:
-        angle += 360
-    return angle
+from pycsou.opt.solver import PGD
+from utils import L1NormMod, get_angle
 
 
 def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix, lambda_=0.5):
+    """
+    Perform the LASSO optimization to recover the density of user clusters and noise level
+
+    :param steering_matrices: of each base station
+    :param beamforming_weights: of each base station
+    :param covariance_matrix: covariance of the signals emitted by each station
+    :param lambda_: regularization parameter
+    :return: gridded density of user clusters, estimated noise level
+    """
     steering_matrix = np.vstack(steering_matrices)
 
     beamforming_cols = []
@@ -48,41 +43,47 @@ def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix
     Q_op = pyop.LinOp.from_array(Q)
     c_op = pyop.LinFunc.from_array(c)
 
-    mask = pylin.DiagonalOp(np.vstack([np.ones((len(D), 1)), 0]).flatten())
+    tmp = [1. for _ in range(len(D))]
+    tmp.append(0.)
 
     data_fid = pyop.QuadraticFunc(shape=(1, len(Q)), Q=Q_op, c=c_op)
-    l1_reg = lambda_ * (pyfu.L1Norm(dim=len(Q)) * mask)
+    l1_reg = lambda_ * L1NormMod(shape=(1, len(Q)))
 
-
+    solver = PGD(data_fid, l1_reg)
+    solver.fit(x0=np.ones(len(Q)))
+    x = solver.solution()
+    return x[:-1], x[-1]
 
 
 def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_resolution=100, cluster_threshold=5):
     """
+    Assign clusters closer to a station to that station and recompute more precise DOAs
+
     density_matrix : matrix with number of users in each pixel
-    base_station_positions : list of positions of the base stations in a 5000x5000m (?) zone
+    base_station_positions : list of positions of the base stations
     matrix_resolution : size of the side of one pixel in density_matrix
     cluster_threshold : Minimum number of users in a cluster in order to consider it
     """
-    bs_doas = [[] for i in range(len(base_station_positions))]
+    bs_doas = [[] for _ in range(len(base_station_positions))]
 
-    for i in range(len(density_matrix)):
-        for j in range(len(density_matrix[i])):
-            if density_matrix[i][j] > cluster_threshold:
-                x_cluster, y_cluster = (
-                    i * matrix_resolution + matrix_resolution / 2, j * matrix_resolution + matrix_resolution / 2)
-                min_dist = -1
-                closest_bs = -1
-                for k in range(len(base_station_positions)):
-                    x = base_station_positions[k][0]
-                    y = base_station_positions[k][1]
-                    dist = (x - x_cluster) ** 2 + (y - y_cluster) ** 2
-                    if dist < min_dist or min_dist < 0:
-                        min_dist = dist
-                        closest_bs = k
+    for i, j in density_matrix.nonzero():
+        if density_matrix[i, j] > cluster_threshold:
+            x_cluster, y_cluster = (
+                i * matrix_resolution + matrix_resolution / 2, j * matrix_resolution + matrix_resolution / 2
+            )
+            min_dist = -1
+            closest_bs = -1
+            for k in range(len(base_station_positions)):
+                x = base_station_positions[k, 0]
+                y = base_station_positions[k, 1]
+                dist = (x - x_cluster) ** 2 + (y - y_cluster) ** 2
+                if dist < min_dist or min_dist < 0:
+                    min_dist = dist
+                    closest_bs = k
 
-                closest_bs_position = base_station_positions[closest_bs]
-                doa = get_angle((x_cluster, y_cluster) - closest_bs_position)
-                bs_doas[closest_bs].append(doa)
+            closest_bs_position = base_station_positions[closest_bs]
+            doa = get_angle(*(np.array([x_cluster, y_cluster]) - closest_bs_position))
+            bs_doas[closest_bs].append(doa)
 
     return bs_doas
 
@@ -104,4 +105,5 @@ if __name__ == "__main__":
     w2 = np.array([4, 5])
     w3 = np.array([7, 8])
 
-    lasso_optimization([s1, s2, s3], [w1, w2, w3], np.eye(3),)
+    f_hat, noise = lasso_optimization([s1, s2, s3], [w1, w2, w3], np.eye(3), )
+    print(f_hat, noise)

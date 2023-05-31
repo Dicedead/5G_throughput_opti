@@ -1,6 +1,7 @@
 import math
 import warnings
 
+import pycsou
 import pycsou.abc as pyca
 import pycsou.operator.func as pycof
 import pycsou.operator.linop as pycl
