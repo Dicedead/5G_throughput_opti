@@ -6,6 +6,7 @@ import scipy as sp
 import pycsou.abc.operator as pyop
 import pycsou.operator.func as pyfu
 import pycsou.util.ptype as pyct
+from flexibeam import flexibeam
 
 
 class L1NormMod(pyop.ProxFunc):
@@ -68,7 +69,7 @@ def throughput_statistic(
         c0=0.8,
         resolution=1e-4
 ):
-    r_user = np.zeros(len(transmitter_positions) * int(1./resolution))
+    r_user = np.zeros(len(transmitter_positions) * int(1. / resolution))
     i = 0
     for pos in transmitter_positions:
         b_gain, _ = beamforming_method(antenna_positions, wavelength, pos, resolution=resolution)
@@ -124,6 +125,7 @@ def variance_throughput(
         resolution=resolution
     )
 
+
 if __name__ == "__main__":
     antenna_positions = np.array([
         [1, 3],
@@ -139,4 +141,3 @@ if __name__ == "__main__":
     ])
 
     print(generate_covariance_matrix(antenna_positions, user_positions))
-
