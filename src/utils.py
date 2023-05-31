@@ -1,19 +1,11 @@
 import math
 
 import numpy as np
+import scipy as sp
+
 import pycsou.abc.operator as pyop
 import pycsou.operator.func as pyfu
 import pycsou.util.ptype as pyct
-
-
-def get_angle(x, y):
-    """
-    Gets angle of a vector (x,y)
-    """
-    angle = math.atan2(y, x) * 180 / math.pi
-    if angle < 0:
-        angle += 360
-    return angle
 
 
 class L1NormMod(pyop.ProxFunc):
@@ -33,6 +25,33 @@ class L1NormMod(pyop.ProxFunc):
 
     def lipschitz(self, **kwargs) -> pyct.Real:
         return self.l1norm.lipschitz()
+
+
+def get_angle(x, y):
+    """
+    Gets angle of a vector (x,y)
+    """
+    angle = math.atan2(y, x) * 180 / math.pi
+    if angle < 0:
+        angle += 360
+    return angle
+
+
+def generate_covariance_matrix(
+        antenna_positions,
+        user_positions,
+        user_intensities,
+        additional_degrees_of_freedom=0,
+        noise_level=0.1
+):
+    steering_matrix = np.exp(-2 * np.pi * 1j * (antenna_positions @ user_positions.T))
+    res = steering_matrix @ np.diag(user_intensities) @ np.conj(steering_matrix).T
+    return res + sp.stats.wishart.rvs(
+        df=len(res) + additional_degrees_of_freedom,
+        scale=noise_level * np.eye(len(res)),
+        size=1
+    )
+
 
 def throughput_statistic(
         statistic,
@@ -100,3 +119,20 @@ def variance_throughput(
         c0=c0,
         resolution=resolution
     )
+
+if __name__ == "__main__":
+    antenna_positions = np.array([
+        [1, 3],
+        [4, 6],
+        [6, 10]
+    ])
+
+    user_positions = np.array([
+        [2, 6],
+        [10, 5],
+        [6, 7],
+        [9, 10]
+    ])
+
+    user_intensities = np.array([1, 1, 1, 1])
+    print(generate_covariance_matrix(antenna_positions, user_positions, user_intensities))

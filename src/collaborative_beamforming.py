@@ -1,8 +1,56 @@
 import numpy as np
 import pycsou.abc.operator as pyop
+from flexibeam import flexibeam
+from music import music_algorithm
 
 from pycsou.opt.solver import PGD
 from utils import L1NormMod, get_angle
+
+
+def collaborative_flexibeam(
+        antenna_positions,
+        station_positions,
+        side_of_region,
+        side_resolution,
+        cov_per_station,
+        cov_of_stations,
+        number_of_doas,
+        wavelength,
+        resolution_music=0.15,
+        resolution_flex=1e-4,
+        lambda_=0.5,
+        cluster_thresh=0
+):
+    sqrt_n_q = side_of_region // side_resolution
+    xx, yy = np.mgrid[:sqrt_n_q, :sqrt_n_q]
+    r = np.array(list(zip(xx, yy))).flatten()
+
+    steering_matrices = []
+    beamforming_weights = []
+    for s in range(len(antenna_positions)):
+        steering_matrices.append(np.exp(-2 * np.pi * 1j * (antenna_positions[s] @ r.T)))
+
+        doas, widths, _, _, _ = music_algorithm(
+            cov_per_station[s], antenna_positions[s], wavelength, number_of_doas, resolution=resolution_music
+        )
+        b_gains_s, ts = flexibeam(antenna_positions[s], doas, widths, wavelength)
+        beamforming_weights.append(b_gains_s)
+
+    density_estimation, _ = lasso_optimization(
+        steering_matrices, beamforming_weights, cov_of_stations, lambda_
+    )
+
+    doas_per_station, widths_per_station = new_doas_from_density_matrix(
+        density_estimation.reshape((r, r)), station_positions,
+        matrix_resolution=side_resolution, cluster_threshold=cluster_thresh
+    )
+
+    for s in range(len(antenna_positions)):
+        beamforming_weights[s], _ = flexibeam(antenna_positions[s], doas_per_station[s], widths_per_station[s],
+                                              lambda_=wavelength, resolution=resolution_flex
+                                              )
+
+    return beamforming_weights
 
 
 def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix, lambda_=0.5):
@@ -55,16 +103,23 @@ def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix
     return x[:-1], x[-1]
 
 
-def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_resolution=100, cluster_threshold=1):
+def new_doas_from_density_matrix(
+        density_matrix,
+        base_station_positions,
+        matrix_resolution=100,
+        cluster_threshold=1
+):
     """
     Assign clusters closer to a station to that station and recompute more precise DOAs
 
-    density_matrix : matrix with number of users in each pixel
-    base_station_positions : list of positions of the base stations
-    matrix_resolution : size of the side of one pixel in density_matrix
-    cluster_threshold : Minimum number of users in a cluster in order to consider it
+    :param density_matrix : matrix with number of users in each pixel
+    :param base_station_positions : list of positions of the base stations
+    :param matrix_resolution : size of the side of one pixel in density_matrix
+    :param cluster_threshold : Minimum number of users in a cluster in order to consider it
+    :return doas and associated widths
     """
     bs_doas = [[] for _ in range(len(base_station_positions))]
+    widths = [[] for _ in range(len(base_station_positions))]
 
     nonzero_indices = list(zip(*density_matrix.nonzero()))
     for i, j in nonzero_indices:
@@ -85,8 +140,9 @@ def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_
             closest_bs_position = base_station_positions[closest_bs]
             doa = get_angle(*(np.array([x_cluster, y_cluster]) - closest_bs_position))
             bs_doas[closest_bs].append(doa)
+            widths[closest_bs].append(2 * 360 * np.arcsin(matrix_resolution / (np.sqrt(2) * min_dist)) / (2 * np.pi))
 
-    return bs_doas
+    return bs_doas, widths
 
 
 if __name__ == "__main__":
