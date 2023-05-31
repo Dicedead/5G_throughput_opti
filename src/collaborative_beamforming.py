@@ -55,7 +55,7 @@ def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix
     return x[:-1], x[-1]
 
 
-def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_resolution=100, cluster_threshold=5):
+def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_resolution=100, cluster_threshold=1):
     """
     Assign clusters closer to a station to that station and recompute more precise DOAs
 
@@ -66,7 +66,8 @@ def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_
     """
     bs_doas = [[] for _ in range(len(base_station_positions))]
 
-    for i, j in density_matrix.nonzero():
+    nonzero_indices = list(zip(*density_matrix.nonzero()))
+    for i, j in nonzero_indices:
         if density_matrix[i, j] > cluster_threshold:
             x_cluster, y_cluster = (
                 i * matrix_resolution + matrix_resolution / 2, j * matrix_resolution + matrix_resolution / 2
@@ -89,21 +90,12 @@ def new_doas_from_density_matrix(density_matrix, base_station_positions, matrix_
 
 
 if __name__ == "__main__":
-    s1 = np.array([
-        [1, 2, 3, 0],
-        [4, 5, 6, 0]
+    density_matrix = np.array([
+        [1, 0, 0, 5],
+        [2, 1, 0, 7]
     ])
-    s2 = np.array([
-        [7, 8, 9, 0],
-        [10, 11, 12, 0]
+    base_station_positions = np.array([
+        [300, 400],
+        [0, 100]
     ])
-    s3 = np.array([
-        [13, 8, 9, 0],
-        [10, 56, 12, 0]
-    ])
-    w1 = np.array([1, 2])
-    w2 = np.array([4, 5])
-    w3 = np.array([7, 8])
-
-    f_hat, noise = lasso_optimization([s1, s2, s3], [w1, w2, w3], np.eye(3), )
-    print(f_hat, noise)
+    print(new_doas_from_density_matrix(density_matrix, base_station_positions))
