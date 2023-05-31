@@ -45,7 +45,7 @@ def generate_covariance_matrix(
         noise_level=0.1
 ):
     if user_intensities is None:
-        user_intensities = np.ones(len(antenna_positions))
+        user_intensities = np.ones(len(user_positions))
 
     steering_matrix = np.exp(-2 * np.pi * 1j * (antenna_positions @ user_positions.T))
     res = steering_matrix @ np.diag(user_intensities) @ np.conj(steering_matrix).T
@@ -138,5 +138,5 @@ if __name__ == "__main__":
         [9, 10]
     ])
 
-    user_intensities = np.array([1, 1, 1, 1])
-    print(generate_covariance_matrix(antenna_positions, user_positions, user_intensities))
+    print(generate_covariance_matrix(antenna_positions, user_positions))
+
