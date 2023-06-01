@@ -1,5 +1,9 @@
 import numpy as np
+import scipy as sp
+
 import pycsou.abc.operator as pyop
+import pycsou.opt.stop as pystop
+
 from flexibeam import flexibeam
 from music import music_algorithm
 
@@ -19,11 +23,12 @@ def collaborative_flexibeam(
         resolution_music=0.15,
         resolution_flex=1e-4,
         lambda_=0.5,
-        cluster_thresh=0
+        cluster_thresh=0,
+        num_iter=3000
 ):
     sqrt_n_q = side_of_region // side_resolution
-    xx, yy = np.mgrid[:sqrt_n_q, :sqrt_n_q]
-    r = np.array(list(zip(xx, yy))).flatten()
+    x, y = np.arange(sqrt_n_q), np.arange(sqrt_n_q)
+    r = dstack_product(x, y) * side_resolution + (side_resolution / 2.) * np.array([1, 1])
 
     steering_matrices = []
     beamforming_weights = []
@@ -33,27 +38,36 @@ def collaborative_flexibeam(
         doas, widths, _, _, _ = music_algorithm(
             cov_per_station[s], antenna_positions[s], wavelength, number_of_doas, resolution=resolution_music
         )
-        b_gains_s, ts = flexibeam(antenna_positions[s], doas, widths, wavelength)
-        beamforming_weights.append(b_gains_s)
+        _, _, w_weights_s = flexibeam(antenna_positions[s] - station_positions[s], doas, widths, wavelength)
+        beamforming_weights.append(w_weights_s)
 
     density_estimation, _ = lasso_optimization(
-        steering_matrices, beamforming_weights, cov_of_stations, lambda_
+        steering_matrices, beamforming_weights, cov_of_stations, lambda_, num_iter=num_iter
     )
 
     doas_per_station, widths_per_station = new_doas_from_density_matrix(
-        density_estimation.reshape((r, r)), station_positions,
+        density_estimation.reshape((int(sqrt_n_q), int(sqrt_n_q))), station_positions,
         matrix_resolution=side_resolution, cluster_threshold=cluster_thresh
     )
 
+    thetas = []
+    beamshapes = []
     for s in range(len(antenna_positions)):
-        beamforming_weights[s], _ = flexibeam(antenna_positions[s], doas_per_station[s], widths_per_station[s],
-                                              lambda_=wavelength, resolution=resolution_flex
-                                              )
+        beamshape, theta, _ = flexibeam(antenna_positions[s] - station_positions[s],
+                                        np.array(doas_per_station[s]), np.array(widths_per_station[s]),
+                                        lambda_=wavelength, resolution=resolution_flex
+                                        )
+        thetas.append(theta)
+        beamshapes.append(beamshape)
 
-    return beamforming_weights
+    return beamshapes, thetas
 
 
-def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix, lambda_=0.5):
+def dstack_product(x, y):
+    return np.dstack(np.meshgrid(x, y)).reshape(-1, 2)
+
+
+def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix, lambda_=0.5, num_iter=3000):
     """
     Perform the LASSO optimization to recover the density of user clusters and noise level
 
@@ -91,14 +105,15 @@ def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix
     Q_op = pyop.LinOp.from_array(Q)
     c_op = pyop.LinFunc.from_array(c)
 
-    tmp = [1. for _ in range(len(D))]
-    tmp.append(0.)
-
     data_fid = pyop.QuadraticFunc(shape=(1, len(Q)), Q=Q_op, c=c_op)
     l1_reg = lambda_ * L1NormMod(shape=(1, len(Q)))
 
     solver = PGD(data_fid, l1_reg)
-    solver.fit(x0=np.ones(len(Q)))
+    solver.fit(
+        x0=np.zeros(len(Q), dtype=np.float64) + 0.1 * np.random.randn(len(Q)),
+        tau=1 / sp.linalg.svdvals(Q)[0],
+        stop_crit=pystop.MaxIter(n=num_iter)
+    )
     x = solver.solution()
     return x[:-1], x[-1]
 

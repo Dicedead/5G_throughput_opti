@@ -6,6 +6,7 @@ import scipy as sp
 import pycsou.abc.operator as pyop
 import pycsou.operator.func as pyfu
 import pycsou.util.ptype as pyct
+from flexibeam import flexibeam
 
 
 class L1NormMod(pyop.ProxFunc):
@@ -134,6 +135,7 @@ def variance_throughput(
         resolution=resolution
     )
 
+
 if __name__ == "__main__":
     antenna_positions = np.array([
         [1, 3],
@@ -148,5 +150,4 @@ if __name__ == "__main__":
         [9, 10]
     ])
 
-    user_intensities = np.array([1, 1, 1, 1])
-    print(generate_covariance_matrix(antenna_positions, user_positions, user_intensities))
+    print(generate_covariance_matrix(antenna_positions, user_positions))
