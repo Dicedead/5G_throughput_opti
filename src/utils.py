@@ -37,6 +37,9 @@ def get_angle(x, y):
     return angle
 
 
+def cartesian_to_arg(cartesian_coords):
+    return np.angle(cartesian_coords[0] + cartesian_coords[1] * 1j)
+
 def generate_covariance_matrix(
         antenna_positions,
         user_positions,
@@ -45,7 +48,7 @@ def generate_covariance_matrix(
         noise_level=0.1
 ):
     if user_intensities is None:
-        user_intensities = np.ones(len(antenna_positions))
+        user_intensities = np.ones(len(user_positions))
 
     steering_matrix = np.exp(-2 * np.pi * 1j * (antenna_positions @ user_positions.T))
     res = steering_matrix @ np.diag(user_intensities) @ np.conj(steering_matrix).T
@@ -68,15 +71,22 @@ def throughput_statistic(
         c0=0.8,
         resolution=1e-4
 ):
-    r_user = np.zeros(len(transmitter_positions) * int(1./resolution))
+    r_user = np.zeros(len(transmitter_positions) ** 2)
     i = 0
     for pos in transmitter_positions:
         b_gain, _ = beamforming_method(antenna_positions, wavelength, pos, resolution=resolution)
-        for b in b_gain:
+        for pos in transmitter_positions:
+            angle = cartesian_to_arg(pos)
+            if(angle < 0):
+                angle = angle + 2*np.pi
+            angle_res = int(int(1./resolution) * angle/(2*np.pi))
+            b = b_gain[angle_res]
             r_user[i] = channel_bandwidth_per_user * np.log2(1 + c0 * (b ** 2) / noise_level)
             i += 1
 
     return statistic(r_user)
+
+    
 
 
 def average_throughput(

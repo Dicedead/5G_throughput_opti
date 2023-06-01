@@ -7,7 +7,7 @@ def flexibeam(antenna_positions, doas, widths, lambda_, resolution=1e-4):
 
     :param antenna_positions: N x 2 array of cartesian coordinates
     :param doas: np array of direction of arrivals, in degree
-    :param widths: desired beamwidth in radian
+    :param widths: desired beamwidth in degree
     :param lambda_: wavelength
     :param resolution: spectral resolution
     :return beamshape and theta discretization
@@ -17,11 +17,11 @@ def flexibeam(antenna_positions, doas, widths, lambda_, resolution=1e-4):
 
     angles = doas / 360 * 2 * np.pi
     r0 = np.array([np.cos(angles), np.sin(angles)])
-    width = widths * 2 * np.pi / 360
-    sigma = np.sqrt(2 - 2 * np.cos(width))
+    widths_rad = widths * 2 * np.pi / 360
+    sigma = np.sqrt(2 - 2 * np.cos(widths_rad))
 
     ampli = np.exp(
-        -2 * (np.pi ** 2) / lambda_ ** 2 * np.dot((np.linalg.norm(antenna_positions, axis=1) ** 2).reshape((-1, 1)),
+        -2 * (np.pi ** 2) / (lambda_ ** 2) * np.dot((np.linalg.norm(antenna_positions, axis=1) ** 2).reshape((-1, 1)),
                                                   (sigma ** 2).reshape((1, -1)))
     )
     w = np.multiply(ampli, np.exp(-1j * 2 * np.pi * np.dot(antenna_positions, r0) / (lambda_)))
