@@ -13,15 +13,14 @@ class L1NormMod(pyop.ProxFunc):
     def __init__(self, shape: pyct.OpShape):
         super().__init__(shape)
         n_out, n_in = shape
-        self.l1norm = pyfu.PositiveL1Norm(dim=n_in - 1)
-        self.posconst = pyfu.PositiveOrthant(dim=1)
+        self.l1norm = pyfu.L1Norm(dim=n_in - 1)
 
     def apply(self, arr: pyct.NDArray) -> pyct.NDArray:
-        return np.vstack([self.l1norm(arr[:-1]), self.posconst(arr[-1])])
+        return np.vstack([self.l1norm(arr[:-1]), arr[-1]])
 
     def prox(self, arr: pyct.NDArray, tau: pyct.Real) -> pyct.NDArray:
         return np.vstack([self.l1norm.prox(arr[:-1], tau=tau).reshape(-1, 1),
-                          self.posconst.prox(arr[-1], tau=tau).reshape(-1, 1)]
+                          arr[-1]]
                          ).flatten()
 
     def lipschitz(self, **kwargs) -> pyct.Real:

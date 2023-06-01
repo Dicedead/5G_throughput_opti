@@ -76,6 +76,7 @@ def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix
     :param covariance_matrix: covariance of the signals emitted by each station
     :param lambda_: regularization parameter
     :return: gridded density of user clusters, estimated noise level
+    :param num_iter: number of iterations of PGD
     """
     steering_matrix = np.vstack(steering_matrices)
 
@@ -110,7 +111,7 @@ def lasso_optimization(steering_matrices, beamforming_weights, covariance_matrix
 
     solver = PGD(data_fid, l1_reg)
     solver.fit(
-        x0=np.zeros(len(Q), dtype=np.float64) + 0.1 * np.random.randn(len(Q)),
+        x0=np.ones(len(Q), dtype=np.float64) + 0.1 * np.random.randn(len(Q)),
         tau=1 / sp.linalg.svdvals(Q)[0],
         stop_crit=pystop.MaxIter(n=num_iter)
     )
